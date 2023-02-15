@@ -132,15 +132,9 @@ def post_users():
         INSERT
         INTO users(username, fullName, pwd)
         VALUES (?, ?, ?)
+        RETURNING username
         """,
         [users['username'], users['fullName'], users['pwd']]
-    )
-    c.execute(
-        """
-        SELECT username
-        FROM users
-        WHERE rowid = last_insert_rowid()
-        """
     )
     found = c.fetchone()
     if not found:
@@ -163,7 +157,7 @@ def post_movies():
         VALUES     (?, ?, ?, 120)
         RETURNING  imdb_key
         """,
-        [movie['m_name'], movie['p_year'], movie['imdb_key'], movie['duration']]
+        [movie['title'], movie['year'], movie['imdbKey']]
     )
     found = c.fetchone()
     if not found:
@@ -173,8 +167,31 @@ def post_movies():
         db.commit()
         response.status = 201
         imdb_key, = found
-        return f"http://localhost:{PORT}/{imdb_key}"
-        
+        return f"http://localhost:{PORT}/{imdb_key}\n"
+
+@post('/performances')
+def post_performance():
+    performance = request.json
+    c = db.cursor()
+    c.execute(
+        """
+        INSERT
+        INTO screenings(start_time, date, imdb_key, th_name)
+        VALUES (?, ?, ?, ?)
+        RETURNING s_id
+        """,
+        [performance['time'], performance['date'], performance['imdbKey'], performance['theater']]
+    )
+    found = c.fetchone()
+    if not found:
+        response.status = 400
+        return "No such movie or theater"
+    else:
+        db.commit()
+        response.status = 201
+        s_id, = found
+        return f"http://localhost:{PORT}/{s_id}\n"
+
 @get('/students')
 def get_students():
     query = """
