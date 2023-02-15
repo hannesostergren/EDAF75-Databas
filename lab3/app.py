@@ -20,7 +20,7 @@ def get_reset():
         """DROP TABLE IF EXISTS screenings""",
         """DROP TABLE IF EXISTS movies""",
         """DROP TABLE IF EXISTS tickets""",
-        """DROP TABLE IF EXISTS customers"""]
+        """DROP TABLE IF EXISTS users"""]
     
     for op in operations :
         c.execute(op)
@@ -60,14 +60,14 @@ def get_reset():
             s_id		TEXT,
 
             PRIMARY KEY	(ti_id),
-            FOREIGN KEY 	(username) 	REFERENCES customers(username),
+            FOREIGN KEY 	(username) 	REFERENCES users(username),
             FOREIGN KEY	(s_id) 		REFERENCES screenings(s_id)
         )""",
 
-        """CREATE TABLE customers	(
+        """CREATE TABLE users	(
             username	TEXT,
-            password	TEXT,
-            full_name	TEXT,
+            fullName	TEXT,
+            pwd         TEXT,
             PRIMARY KEY 	(username)
         )"""]
     for op in create_operations :
@@ -123,6 +123,58 @@ def get_users(s_id):
     return {"data": found}
 
 
+@post('/users')
+def post_users():
+    users = request.json
+    c = db.cursor()
+    c.execute(
+        """
+        INSERT
+        INTO users(username, fullName, pwd)
+        VALUES (?, ?, ?)
+        """,
+        [users['username'], users['fullName'], users['pwd']]
+    )
+    c.execute(
+        """
+        SELECT username
+        FROM users
+        WHERE rowid = last_insert_rowid()
+        """
+    )
+    found = c.fetchone()
+    if not found:
+        response.status = 400
+        return ""
+    else:
+        db.commit()
+        response.status = 201
+        username, = found
+        return f"http://localhost:{PORT}/{username}\n"
+
+@post('/movies')
+def post_movies():
+    movie = request.json
+    c = db.cursor()
+    c.execute(
+        """
+        INSERT
+        INTO       movies(m_name, p_year, imdb_key, duration)
+        VALUES     (?, ?, ?, 120)
+        RETURNING  imdb_key
+        """,
+        [movie['m_name'], movie['p_year'], movie['imdb_key'], movie['duration']]
+    )
+    found = c.fetchone()
+    if not found:
+        response.status = 400
+        return "Illegal..."
+    else:
+        db.commit()
+        response.status = 201
+        imdb_key, = found
+        return f"http://localhost:{PORT}/{imdb_key}"
+        
 @get('/students')
 def get_students():
     query = """
