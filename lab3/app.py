@@ -122,6 +122,43 @@ def get_users(s_id):
     response.status = 200
     return {"data": found}
 
+@get('/movies')
+def get_movies():
+    c = db.cursor()
+    query = """
+        SELECT imdb_key, m_name, p_year
+        FROM movies
+        WHERE 1 = 1
+        """
+    params = []
+    if request.query.title:
+        query += " AND m_name = ?"
+        params.append(unquote(request.query.title))
+    if request.query.year:
+        query += " AND p_year >= ?"
+        params.append(request.query.year)
+    if request.query.imdbKey:
+        query += " AND imdb_key = ?"
+        params.append(unquote(request.query.imdbKey))
+    c.execute(query, params)
+    found = [{"imdbKey" : imdb_key, "title" : title, "year" : year} for imdb_key, title, year in c]
+    response.status = 200
+    return {"data" : found}
+
+@get('/performances')
+def get_performances():
+    c = db.cursor()
+    c.execute("""
+        SELECT s_id, date, start_time, m_name, p_year, th_name, capacity
+        FROM screenings
+        LEFT JOIN movies USING (imdb_key)
+        LEFT JOIN theaters USING (th_name)
+        """
+    )
+    found = [{"performanceId" : s_id, "date" : date, "startTime" : start_time, "title" : m_name, "year" : p_year, "theater" : th_name, "remainingSeats" : capacity}
+             for s_id, date, start_time, m_name, p_year, th_name, capacity in c]
+    response.status = 200
+    return {"data" : found}
 
 @post('/users')
 def post_users():
@@ -146,6 +183,7 @@ def post_users():
         username, = found
         return f"http://localhost:{PORT}/{username}\n"
 
+#TODO Fixa unique constraint failed
 @post('/movies')
 def post_movies():
     movie = request.json
@@ -175,6 +213,31 @@ def post_performance():
     c = db.cursor()
     c.execute(
         """
+        SELECT *
+        FROM theaters
+        WHERE th_name = ?
+        """,
+        [performance['theater']]
+    )
+    th_found = c.fetchone()
+    if not th_found:
+        response.status = 400
+        return "No such movie or theater\n"
+    c.execute(
+        """
+        SELECT *
+        FROM movies
+        WHERE imdb_key = ?
+        """,
+        [performance['imdbKey']]
+    )
+    mv_found = c.fetchone()
+    if not mv_found:
+        response.status = 400
+        return "No such movie or theater\n"
+    
+    c.execute(
+        """
         INSERT
         INTO screenings(start_time, date, imdb_key, th_name)
         VALUES (?, ?, ?, ?)
@@ -185,7 +248,7 @@ def post_performance():
     found = c.fetchone()
     if not found:
         response.status = 400
-        return "No such movie or theater"
+        return "No such movie or theater\n"
     else:
         db.commit()
         response.status = 201
