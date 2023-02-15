@@ -107,18 +107,20 @@ def get_reset():
     #"Skandia", 100 seats
 
 @get('/users')
-def get_users(s_id):
+def get_users():
     c = db.cursor()
     c.execute(
         """
-        SELECT   s_id, s_name, gpa, size_hs
-        FROM     students
-        WHERE    s_id = ?
-        """,
-        [s_id]
+        SELECT username, fullName
+        FROM users
+        WHERE 1 = 1
+        """
     )
-    found = [{"id": s_id, "name": s_name, "gpa": gpa, "sizeHS": size_hs}
-             for s_id, s_name, gpa, size_hs in c]
+    params = []
+    if request.query.username:
+        query += " AND username = ?"
+        params.append(unquote(request.query.username))
+    found = [{"username" : username, "fullName" : fullName} for username, fullName in c]
     response.status = 200
     return {"data": found}
 
@@ -135,7 +137,7 @@ def get_movies():
         query += " AND m_name = ?"
         params.append(unquote(request.query.title))
     if request.query.year:
-        query += " AND p_year >= ?"
+        query += " AND p_year = ?"
         params.append(request.query.year)
     if request.query.imdbKey:
         query += " AND imdb_key = ?"
@@ -159,6 +161,41 @@ def get_performances():
              for s_id, date, start_time, m_name, p_year, th_name, capacity in c]
     response.status = 200
     return {"data" : found}
+
+@post('/tickets')
+def post_tickets():
+    ticket = request.json
+    c = db.cursor()
+    c.execute("""
+        SELECT pwd
+        FROM users
+        WHERE username = ?
+    """,
+    [ticket['username']]
+    )
+    found_pwd, = c.fetchone()
+    if found_pwd == ticket['pwd']:
+        c.execute(
+            """
+            INSERT
+            INTO tickets(username, s_id)
+            VALUES (?, ?)
+            RETURNING ti_id
+            """,
+            [ticket['username'], ticket['pwd']]
+        )
+        found = c.fetchone()
+        if not found:
+            response.status = 400
+            return ""
+        else:
+            db.commit()
+            response.status = 201
+            ti_id, = found
+            return f"http://localhost:{PORT}/{ti_id}\n"
+    else:
+        response.status = 401
+        return "Wrong user credentials"
 
 @post('/users')
 def post_users():
