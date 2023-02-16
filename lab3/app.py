@@ -36,7 +36,6 @@ def get_reset():
             m_name		TEXT,
             p_year		INTEGER,
             imdb_key	TEXT,
-            duration	INTEGER,
             PRIMARY KEY 	(imdb_key)
         )""",
 
@@ -44,7 +43,7 @@ def get_reset():
             start_time	TIME,
             date		DATE,
             s_id		TEXT DEFAULT (lower(hex(randomblob(16)))),
-        -- foreign keys:
+            remaining_seats INT,
             imdb_key	TEXT,
             th_name		TEXT,
 
@@ -114,6 +113,7 @@ def get_users():
         SELECT username, fullName
         FROM users
         WHERE 1 = 1
+        RETURNING s_id
         """
     )
     params = []
@@ -123,6 +123,19 @@ def get_users():
     found = [{"username" : username, "fullName" : fullName} for username, fullName in c]
     response.status = 200
     return {"data": found}
+
+@get('/users/<username>/tickets')
+def get_users_tickets():
+    c = db.cursor()
+    c.execute(
+        """
+        SELECT date, start_time, th_name, title, year, capacity
+        FROM tickets
+        LEFT JOIN screening USING (s_id)
+        LEFT JOIN theater USING (th_name)
+        """
+    )
+    
 
 @get('/movies')
 def get_movies():
@@ -162,6 +175,8 @@ def get_performances():
     response.status = 200
     return {"data" : found}
 
+
+##TODO add functionality, hashing?
 @post('/tickets')
 def post_tickets():
     ticket = request.json
@@ -220,16 +235,15 @@ def post_users():
         username, = found
         return f"http://localhost:{PORT}/{username}\n"
 
-#TODO Fixa unique constraint failed
 @post('/movies')
 def post_movies():
     movie = request.json
     c = db.cursor()
     c.execute(
         """
-        INSERT
-        INTO       movies(m_name, p_year, imdb_key, duration)
-        VALUES     (?, ?, ?, 120)
+        INSERT OR IGNORE
+        INTO       movies(m_name, p_year, imdb_key)
+        VALUES     (?, ?, ?)
         RETURNING  imdb_key
         """,
         [movie['title'], movie['year'], movie['imdbKey']]
@@ -237,7 +251,7 @@ def post_movies():
     found = c.fetchone()
     if not found:
         response.status = 400
-        return "Illegal..."
+        return ""
     else:
         db.commit()
         response.status = 201
@@ -248,18 +262,6 @@ def post_movies():
 def post_performance():
     performance = request.json
     c = db.cursor()
-    c.execute(
-        """
-        SELECT *
-        FROM theaters
-        WHERE th_name = ?
-        """,
-        [performance['theater']]
-    )
-    th_found = c.fetchone()
-    if not th_found:
-        response.status = 400
-        return "No such movie or theater\n"
     c.execute(
         """
         SELECT *
@@ -275,22 +277,35 @@ def post_performance():
     
     c.execute(
         """
-        INSERT
-        INTO screenings(start_time, date, imdb_key, th_name)
-        VALUES (?, ?, ?, ?)
-        RETURNING s_id
+        SELECT capacity
+        FROM theaters
+        WHERE th_name = ?
         """,
-        [performance['time'], performance['date'], performance['imdbKey'], performance['theater']]
+        [performance['theater']]
     )
     found = c.fetchone()
     if not found:
         response.status = 400
         return "No such movie or theater\n"
-    else:
-        db.commit()
-        response.status = 201
-        s_id, = found
-        return f"http://localhost:{PORT}/{s_id}\n"
+    cap, = found
+    c.execute(
+        """
+        INSERT
+        INTO screenings(start_time, date, imdb_key, th_name, remaining_seats)
+        VALUES (?, ?, ?, ?, ?)
+        RETURNING s_id
+        """,
+        [performance['time'], performance['date'], performance['imdbKey'], performance['theater'], cap]
+    )
+    found = c.fetchone()
+    db.commit()
+    response.status = 201
+    s_id, = found
+    return f"http://localhost:{PORT}/{s_id}\n"
+
+def hash(msg):
+    import hashlib
+    return hashlib.sha256(msg.encode('utf-8')).hexdigest()
 
 @get('/students')
 def get_students():
