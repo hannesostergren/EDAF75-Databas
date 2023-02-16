@@ -182,10 +182,25 @@ def get_movies():
     if request.query.year:
         query += " AND p_year = ?"
         params.append(request.query.year)
-    if request.query.imdbKey:
-        query += " AND imdb_key = ?"
-        params.append(unquote(request.query.imdbKey))
+    # if request.query.imdbKey:
+    #     query += " AND imdb_key = ?"
+    #     params.append(unquote(request.query.imdbKey))
     c.execute(query, params)
+    found = [{"imdbKey" : imdb_key, "title" : title, "year" : year} for imdb_key, title, year in c]
+    response.status = 200
+    return {"data" : found}
+
+@get('/movies/<imdbKey>')
+def get_movies_imdb(imdbKey):
+    c = db.cursor()
+    c.execute(
+        """
+        SELECT imdb_key, m_name, p_year
+        FROM movies
+        WHERE imdb_key = ?
+        """,
+        [imdbKey]
+    )
     found = [{"imdbKey" : imdb_key, "title" : title, "year" : year} for imdb_key, title, year in c]
     response.status = 200
     return {"data" : found}
@@ -248,7 +263,7 @@ def post_tickets():
             found = c.fetchone()
             if not found:
                 response.status = 400
-                return "No remaining tickets"
+                return "No tickets left"
             db.commit()
             # skapa ticket
             c.execute(
@@ -268,7 +283,7 @@ def post_tickets():
                 db.commit()
                 response.status = 201
                 ti_id, = found
-                return f"http://localhost:{PORT}/{ti_id}\n"
+                return f"/tickets/{ti_id}\n"
     else:
         response.status = 401
         return "Wrong user credentials"
@@ -294,7 +309,7 @@ def post_users():
         db.commit()
         response.status = 201
         username, = found
-        return f"http://localhost:{PORT}/{username}\n"
+        return f"/users/{username}\n"
 
 @post('/movies')
 def post_movies():
@@ -317,7 +332,7 @@ def post_movies():
         db.commit()
         response.status = 201
         imdb_key, = found
-        return f"http://localhost:{PORT}/{imdb_key}\n"
+        return f"/movies/{imdb_key}\n"
 
 @post('/performances')
 def post_performance():
@@ -362,7 +377,7 @@ def post_performance():
     db.commit()
     response.status = 201
     s_id, = found
-    return f"http://localhost:{PORT}/{s_id}\n"
+    return f"/performances/{s_id}\n"
 
 def hash(msg):
     import hashlib
