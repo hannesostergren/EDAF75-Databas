@@ -16,11 +16,13 @@ def ret_pong():
 @get('/reset')
 def get_reset():
     c = db.cursor()
-    operations = ["""DROP TABLE IF EXISTS theaters""",
+    operations = ["""PRAGMA foreign_keys=OFF""",
+        """DROP TABLE IF EXISTS theaters""",
         """DROP TABLE IF EXISTS screenings""",
         """DROP TABLE IF EXISTS movies""",
         """DROP TABLE IF EXISTS tickets""",
-        """DROP TABLE IF EXISTS users"""]
+        """DROP TABLE IF EXISTS users""",
+        """PRAGMA foreign_keys=ON"""]
     
     for op in operations :
         c.execute(op)
@@ -49,7 +51,7 @@ def get_reset():
 
             PRIMARY KEY 	(s_id),
             FOREIGN KEY	(imdb_key) 	REFERENCES movies(imdb_key),
-            FOREIGN KEY 	(th_name) 	REFERENCES theatres(th_name)
+            FOREIGN KEY 	(th_name) 	REFERENCES theaters(th_name)
         )""",
 
         """CREATE TABLE tickets	(
@@ -98,12 +100,25 @@ def get_reset():
         FROM     theaters
         """
     )
+    db.commit()
     found = [{'name': th_name} for th_name in c]
     response.status = 200
     return {"data": found}
     #"Kino", 10 seats
     #"Regal", 16 seats
     #"Skandia", 100 seats
+
+@get('/theaters')
+def get_theaters():
+    c = db.cursor()
+    c.execute(
+        """
+        SELECT *
+        FROM theaters"""
+    )
+    found = [{"th_name" : th_name} for th_name in c]
+    response.status = 200
+    return {"data": found}
 
 @get('/users')
 def get_users():
@@ -112,29 +127,44 @@ def get_users():
         """
         SELECT username, fullName
         FROM users
-        WHERE 1 = 1
-        RETURNING s_id
         """
     )
-    params = []
-    if request.query.username:
-        query += " AND username = ?"
-        params.append(unquote(request.query.username))
-    found = [{"username" : username, "fullName" : fullName} for username, fullName in c]
+    found = [{"username" : username, "fullName" : full_name} for username, full_name in c]
+    response.status = 200
+    return {"data": found}
+
+@get('/users/<username>/test')
+def get_test(username):
+    c = db.cursor()
+    c.execute(
+        """
+        SELECT s_id
+        FROM tickets
+        """
+    )
+    found = [{"s_id": sid}
+             for sid in c]
     response.status = 200
     return {"data": found}
 
 @get('/users/<username>/tickets')
-def get_users_tickets():
+def get_users_tickets(username):
     c = db.cursor()
     c.execute(
         """
-        SELECT date, start_time, th_name, title, year, capacity
+        SELECT date, start_time, th_name, m_name, p_year, count()
         FROM tickets
-        LEFT JOIN screening USING (s_id)
-        LEFT JOIN theater USING (th_name)
-        """
+        LEFT JOIN screenings USING (s_id)
+        LEFT JOIN movies USING (imdb_key)
+        WHERE username = ?
+        GROUP BY s_id
+        """,
+        [username]
     )
+    found = [{"date": date, "startTime": start_time, "theater": th_name, "title": m_name, "year" : p_year, "nbrOfTickets" : nbrOfTickets}
+             for date, start_time, th_name, m_name, p_year, nbrOfTickets in c]
+    response.status = 200
+    return {"data": found}
     
 
 @get('/movies')
@@ -164,10 +194,9 @@ def get_movies():
 def get_performances():
     c = db.cursor()
     c.execute("""
-        SELECT s_id, date, start_time, m_name, p_year, th_name, capacity
+        SELECT s_id, date, start_time, m_name, p_year, th_name, remaining_seats
         FROM screenings
         LEFT JOIN movies USING (imdb_key)
-        LEFT JOIN theaters USING (th_name)
         """
     )
     found = [{"performanceId" : s_id, "date" : date, "startTime" : start_time, "title" : m_name, "year" : p_year, "theater" : th_name, "remainingSeats" : capacity}
@@ -176,11 +205,11 @@ def get_performances():
     return {"data" : found}
 
 
-##TODO add functionality, hashing?
 @post('/tickets')
 def post_tickets():
     ticket = request.json
     c = db.cursor()
+    # leta upp hashade lösen till användaren
     c.execute("""
         SELECT pwd
         FROM users
@@ -189,25 +218,57 @@ def post_tickets():
     [ticket['username']]
     )
     found_pwd, = c.fetchone()
-    if found_pwd == ticket['pwd']:
+    # kontrollera att angivet lösenord hashas till rätt värde
+    if found_pwd == hash(ticket['pwd']):
+        # leta upp spelningen
         c.execute(
             """
-            INSERT
-            INTO tickets(username, s_id)
-            VALUES (?, ?)
-            RETURNING ti_id
+            SELECT s_id
+            FROM screenings
+            WHERE s_id = ?
             """,
-            [ticket['username'], ticket['pwd']]
+            [ticket['performanceId']]
         )
         found = c.fetchone()
         if not found:
             response.status = 400
-            return ""
+            return "No such performance"
         else:
+            # testa att sänka remaining_seats med ett, OM det var större än 0 
+            # vi kontrollerar under om en ändring faktiskt gjordes, 
+            # annars fanns det inga platser kvar, och ingen ändring sker
+            c.execute(
+                """
+                UPDATE screenings SET remaining_seats = remaining_seats - 1
+                WHERE s_id = ? AND remaining_seats > 0
+                RETURNING remaining_seats
+                """,
+                [ticket['performanceId']]
+            )
+            found = c.fetchone()
+            if not found:
+                response.status = 400
+                return "No remaining tickets"
             db.commit()
-            response.status = 201
-            ti_id, = found
-            return f"http://localhost:{PORT}/{ti_id}\n"
+            # skapa ticket
+            c.execute(
+                """
+                INSERT
+                INTO tickets(username, s_id)
+                VALUES (?, ?)
+                RETURNING ti_id
+                """,
+                [ticket['username'], ticket['performanceId']]
+            )
+            found = c.fetchone()
+            if not found:
+                response.status = 400
+                return "Error"
+            else:
+                db.commit()
+                response.status = 201
+                ti_id, = found
+                return f"http://localhost:{PORT}/{ti_id}\n"
     else:
         response.status = 401
         return "Wrong user credentials"
@@ -223,7 +284,7 @@ def post_users():
         VALUES (?, ?, ?)
         RETURNING username
         """,
-        [users['username'], users['fullName'], users['pwd']]
+        [users['username'], users['fullName'], hash(users['pwd'])]
     )
     found = c.fetchone()
     if not found:
