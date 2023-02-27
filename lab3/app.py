@@ -13,6 +13,101 @@ db = sqlite3.connect("movies.sqlite")
 def ret_pong():
     return "pong\n"
 
+@post('/reset')
+def post_reset():
+    c = db.cursor()
+    operations = ["""PRAGMA foreign_keys=OFF""",
+        """DROP TABLE IF EXISTS theaters""",
+        """DROP TABLE IF EXISTS screenings""",
+        """DROP TABLE IF EXISTS movies""",
+        """DROP TABLE IF EXISTS tickets""",
+        """DROP TABLE IF EXISTS users""",
+        """PRAGMA foreign_keys=ON"""]
+    
+    for op in operations :
+        c.execute(op)
+    
+    create_operations = [
+        """CREATE TABLE theaters 	(
+            th_name		TEXT,
+            capacity	INTEGER,
+            PRIMARY KEY 	(th_name)
+        )""",
+
+        """CREATE TABLE movies	(
+            m_name		TEXT,
+            p_year		INTEGER,
+            imdb_key	TEXT,
+            PRIMARY KEY 	(imdb_key)
+        )""",
+
+        """CREATE TABLE screenings	(
+            start_time	TIME,
+            date		DATE,
+            s_id		TEXT DEFAULT (lower(hex(randomblob(16)))),
+            remaining_seats INT,
+            imdb_key	TEXT,
+            th_name		TEXT,
+
+            PRIMARY KEY 	(s_id),
+            FOREIGN KEY	(imdb_key) 	REFERENCES movies(imdb_key),
+            FOREIGN KEY 	(th_name) 	REFERENCES theaters(th_name)
+        )""",
+
+        """CREATE TABLE tickets	(
+            ti_id		TEXT DEFAULT (lower(hex(randomblob(16)))),
+        -- foreign keys:
+            username	TEXT,
+            s_id		TEXT,
+
+            PRIMARY KEY	(ti_id),
+            FOREIGN KEY 	(username) 	REFERENCES users(username),
+            FOREIGN KEY	(s_id) 		REFERENCES screenings(s_id)
+        )""",
+
+        """CREATE TABLE users	(
+            username	TEXT,
+            fullName	TEXT,
+            pwd         TEXT,
+            PRIMARY KEY 	(username)
+        )"""]
+    for op in create_operations :
+        c.execute(op)
+        
+    insert_operations = [
+        """
+        INSERT OR REPLACE
+        INTO   theaters(th_name, capacity)
+        VALUES ('Kino', '10');
+        """,
+        """
+        INSERT OR REPLACE
+        INTO   theaters(th_name, capacity)
+        VALUES ('Regal', '16');
+        """,
+        """
+        INSERT OR REPLACE
+        INTO   theaters(th_name, capacity)
+        VALUES ('Skandia', '100');
+        """
+    ]
+    for op in insert_operations:
+        c.execute(op)
+    
+    c.execute(
+        """
+        SELECT   *
+        FROM     theaters
+        """
+    )
+    db.commit()
+    found = [{'name': th_name} for th_name in c]
+    response.status = 200
+    return {"data": found}
+    #"Kino", 10 seats
+    #"Regal", 16 seats
+    #"Skandia", 100 seats
+
 @get('/reset')
 def get_reset():
     c = db.cursor()
