@@ -123,24 +123,145 @@ def post_customers():
         """,
         [customers['customerName'], customers['address']]
     )
-    found = c.fetchone()
-    response.status = 201
-    found = [{'customerName' : customerName} for customerName in c]
-    customerName, = url_encode(found)
+    found, = c.fetchone()
     db.commit()
-    return { "location": "/customers/" + customerName } 
+    response.status = 201
+    encodedCustomerName = url_encode(found)
+    return { "location": "/customers/" + encodedCustomerName } 
         
-@get('/theaters')
-def get_theaters():
+@get('/customers')
+def get_customers():
+    c = db.cursor()
+    c.execute(
+        """ SELECT *
+            FROM customers
+        """
+    )
+
+    found = [{"customerName" : customerName, "address" : address} for customerName, address in c]
+    response.status = 200
+    return {"data": found}
+    
+
+
+@post('/ingredients')
+def post_ingredients():
+    ingredients = request.json
+    c = db.cursor()
+    c.execute(
+        """
+        INSERT
+        INTO ingredients(ingredientName, amount, unit, deliveryDate, deliveryAmount)
+        VALUES (?, 0, ?, '1970-01-01', 0)
+        RETURNING ingredientName
+        """,
+        [ingredients['ingredient'], ingredients['unit']]
+    )
+    found, = c.fetchone()
+    db.commit()
+    response.status = 201
+    encodedIngredientName = url_encode(found)
+    return { "location": "/ingredients/" + encodedIngredientName } 
+
+@post('/ingredients/<ingredientName>/deliveries')
+def post_ingredient_delivery(ingredientName):
+    ingredients = request.json
+    ingredientName = url_decode(ingredientName)
+    c = db.cursor()
+    c.execute(
+        """
+        UPDATE ingredients
+        SET amount = amount + ?,
+            deliveryDate = ?,
+            deliveryAmount = ?
+        WHERE ingredientName = ?
+        RETURNING ingredientName, amount, unit
+        """,
+        [ingredients['quantity'], ingredients['deliveryTime'], ingredients['quantity'], ingredientName]
+    )
+    found = c.fetchone()
+    print(found)
+    db.commit()
+    response.status = 201
+    result = {"ingredient" : found[0], "quantity" : found[1], "unit" : found[2]}
+    
+    return { "data": result} 
+
+
+@get('/ingredients')
+def get_ing():
     c = db.cursor()
     c.execute(
         """
         SELECT *
-        FROM theaters"""
+        FROM ingredients"""
     )
-    found = [{"th_name" : th_name} for th_name in c]
+    found = [{"ingredient" : ingredient, "quantity" : quantity, "unit" : unit} for ingredient, quantity, unit in c]
     response.status = 200
     return {"data": found}
+
+@post('/cookies')
+def post_cookies():
+    cookies = request.json
+    c = db.cursor()
+    # lägg till kakan
+    c.execute(
+            """
+            INSERT
+            INTO recipes(recipeName)
+            VALUES (?)
+            """,
+            [cookies['name']]
+        )
+    # lägg till kakans recept
+    for item in cookies['recipe'] :
+        c.execute(
+            """
+            INSERT
+            INTO recipeItems(recipeName, ingredientName, amount)
+            VALUES (?, ?, ?) 
+            RETURNING recipeName
+            """,
+            [cookies['name'], item['ingredient'], item['amount']]
+        )
+    found, = c.fetchone()
+    db.commit()
+    response.status = 201
+    cookieName = url_encode(found)
+    return { "location": "/customers/" + cookieName } 
+
+@get('/cookies')
+def get_cookies():
+    c = db.cursor()
+    c.execute(
+        """ SELECT recipeName
+            FROM recipes
+        """
+    )
+    found = [{"name" : recipeName} for recipeName in c]
+    response.status = 200
+    return {"data": found}
+
+@get('/cookies/<recipeName>/recipe')
+def get_cookie_recipe(recipeName):
+    c = db.cursor()
+    recipeName = url_decode(recipeName)
+    c.execute(
+        """
+        SELECT ingredientName, recipeItems.amount, unit
+        FROM recipeItems 
+            JOIN recipes USING (recipeName)
+            JOIN ingredients USING (ingredientName)
+        WHERE recipeName = ?
+        """,
+        [recipeName]
+    )
+    found = [{"ingredient": ingredientName, "amount":amount, "unit":unit} 
+                        for ingredientName, amount, unit in c]
+    response.status = 200
+    return {"data": found}
+# TODO: handle if no cookie found
+
 
 @get('/users')
 def get_users():
