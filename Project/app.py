@@ -235,7 +235,7 @@ def get_ing():
     c = db.cursor()
     c.execute(
         """
-        SELECT *
+        SELECT ingredientName, amount, unit
         FROM ingredients"""
     )
     found = [{"ingredient" : ingredient, "quantity" : quantity, "unit" : unit} for ingredient, quantity, unit in c]
@@ -256,7 +256,7 @@ def post_cookies():
             [cookies['name']]
         )
     # lägg till kakans recept
-    for item in cookies['recipe'] :
+    for item in cookies['recipe']:
         c.execute(
             """
             INSERT
@@ -276,15 +276,13 @@ def post_cookies():
 def get_cookies():
     c = db.cursor()
     c.execute(
-        """ SELECT recipeName
-            FROM recipes
-            --INNER JOIN storage USING (recipeName)
-            --WHERE blocked = 0
-            --GROUP BY recipeName
+        """
+        SELECT recipeName
+        FROM recipes
         """
     )
     #found = [{"name" : recipeName, "pallets" : pallets} for recipeName, pallets in c]
-    found = [{"name" : recipeName} for recipeName in c]
+    found = [{"name" : recipeName} for recipeName, in c]
     response.status = 200
     return {"data": found}
 

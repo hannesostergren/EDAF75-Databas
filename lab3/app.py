@@ -237,8 +237,7 @@ def get_test(username):
         FROM tickets
         """
     )
-    found = [{"s_id": sid}
-             for sid in c]
+    found = [{"s_id": sid} for sid in c]
     response.status = 200
     return {"data": found}
 
