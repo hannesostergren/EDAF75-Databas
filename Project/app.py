@@ -18,6 +18,28 @@ def url_encode(text):
 def ret_pong():
     return "pong\n"
 
+@post('/trigger')
+def ingredient_trigger():
+    c = db.cursor()
+    c.executescript(
+        """
+        DROP TRIGGER IF EXISTS ingredient_amount_not_negative
+        ;
+        CREATE TRIGGER ingredient_amount_not_negative
+        AFTER UPDATE ON ingredients
+        BEGIN
+
+        SELECT IIF(
+            NEW.amount < 0, 
+            RAISE (ROLLBACK, "negative ingredient amount"),
+            ':)'
+        );
+        
+        END
+        ;
+        """
+    )
+
 @post('/reset')
 def post_reset():
     c = db.cursor()
@@ -103,7 +125,7 @@ def post_reset():
     for op in create_operations :
         c.execute(op)
         
-
+    ingredient_trigger()
     db.commit()
     response.status = 205
     return { "location": "/" }
@@ -258,32 +280,68 @@ def get_cookie_recipe(recipeName):
     )
     found = [{"ingredient": ingredientName, "amount":amount, "unit":unit} 
                         for ingredientName, amount, unit in c]
+    if not found :
+        response.status = 404
+        return {"data": []}
     response.status = 200
     return {"data": found}
-# TODO: handle if no cookie found
+
+@post('/pallets')
+def post_pallets():
+    cookie = request.json
+    c = db.cursor()
+    # running out of ingredients is handled by a trigger that will 
+    # rollback the transaction
+    c.execute(
+        """
+        BEGIN TRANSACTION
+        UPDATE 
+        ingredients
+        JOIN recipeItems USING (ingredientName)
+        SET ingredient.amount = (ingredient.amount - recipeItems.amount)
+        WHERE recipeName = ?
+        ;
+        INSERT
+        INTO storage(palletNumber, productionDate, blocked, recipeName)
+        VALUES (0, DATE('now'), 0, ?)
+        COMMIT TRANSACTION
+        """,
+        [cookie['cookie'],cookie['cookie']]
+    )
+    # TODO: change palletNumber in sql-statement
+    found, = c.fetchone()
+    db.commit()
+    # TODO: handle fail, see following comments
+    # response.status = 422
+    # return { "location": "" } 
+    response.status = 201
+    palletURL = url_encode(found)
+    return { "location": "/pallets/" + palletURL }
 
 @post('/cookies/<recipeName>/block')
 def post_block_cookie(recipeName):
-     c = db.cursor
-     query = """
+    c = db.cursor
+    query = """
         UPDATE storage
         SET blocked = 1,
         WHERE 1 = 1
         """
-     params = []
-     if request.query.name:
+    params = []
+    if request.query.name:
         query += " AND productionDate > ?"
         params.append(unquote(request.query.before))
     if request.query.minGpa:
         query += " AND productionDate < ?"
         params.append(float(request.query.after))
+    
 
 @post('/cookies/<recipeName>/unblock')
 def post_unblock_cookie(recipeName):
     c = db.cursor
     recipeName = url_decode(recipeName)
     c.execute(
-        """UPDATE storage
+        """
+            UPDATE storage
             SET blocked = 1
             WHERE recipeName = ?
         """, [recipeName]
