@@ -34,7 +34,7 @@ CREATE TABLE orders(
     recipeName TEXT,
     PRIMARY KEY (orderID),
     FOREIGN KEY (customerName) REFERENCES customers(customerName),
-    FOREIGN KEY (recipeName) REFERENCES recipes(recipeName)   
+    FOREIGN KEY (recipeName) REFERENCES recipes(recipeName)
 );
 
 CREATE TABLE loadingBills(
