@@ -262,6 +262,23 @@ def get_cookie_recipe(recipeName):
     return {"data": found}
 # TODO: handle if no cookie found
 
+@post('/cookies/<recipeName>/block')
+def post_block_cookie(recipeName):
+     c = db.cursor
+     query = """
+        SELECT   s_id, s_name, gpa, size_hs
+        FROM     students
+        WHERE    1 = 1
+        """
+     params = []
+     if request.query.name:
+        query += " AND s_name = ?"
+        params.append(unquote(request.query.name))
+    if request.query.minGpa:
+        query += " AND gpa >= ?"
+        params.append(float(request.query.minGpa))
+
+@post('/cookies/<recipeName>/unblock')
 
 @get('/users')
 def get_users():
