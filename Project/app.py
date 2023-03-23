@@ -39,6 +39,26 @@ def ingredient_trigger():
         ;
         """
     )
+    c.executescript(
+        """
+        DROP TRIGGER IF EXISTS remove_ingredients_for_baking
+        ;
+        CREATE TRIGGER remove_ingredients_for_baking
+        BEFORE INSERT ON storage
+        BEGIN
+            UPDATE ingredients
+            SET amount = amount - (
+                SELECT amount
+                FROM recipeItems
+                WHERE ingredients.ingredientName = recipeItems.ingredientName
+            )            
+            ;
+        END
+        ;
+        """
+    )
+    db.commit()
+
 
 @post('/reset')
 def post_reset():
@@ -125,7 +145,7 @@ def post_reset():
     for op in create_operations :
         c.execute(op)
         
-    ingredient_trigger()
+    # ingredient_trigger()
     db.commit()
     response.status = 205
     return { "location": "/" }
@@ -143,7 +163,7 @@ def post_customers():
         VALUES (?, ?)
         RETURNING customerName
         """,
-        [customers['customerName'], customers['address']]
+        [customers['name'], customers['address']]
     )
     found, = c.fetchone()
     db.commit()
@@ -250,7 +270,7 @@ def post_cookies():
     db.commit()
     response.status = 201
     cookieName = url_encode(found)
-    return { "location": "/customers/" + cookieName } 
+    return { "location": "/cookies/" + cookieName } 
 
 @get('/cookies')
 def get_cookies():
@@ -258,8 +278,12 @@ def get_cookies():
     c.execute(
         """ SELECT recipeName
             FROM recipes
+            --INNER JOIN storage USING (recipeName)
+            --WHERE blocked = 0
+            --GROUP BY recipeName
         """
     )
+    #found = [{"name" : recipeName, "pallets" : pallets} for recipeName, pallets in c]
     found = [{"name" : recipeName} for recipeName in c]
     response.status = 200
     return {"data": found}
@@ -286,6 +310,33 @@ def get_cookie_recipe(recipeName):
     response.status = 200
     return {"data": found}
 
+@get('/pallets')
+def get_pallets():
+    c = db.cursor()
+    query = """
+        SELECT *
+        FROM storage
+        WHERE 1 = 1
+        """
+    params = []
+    if request.query.cookie:
+        query += " AND recipeName = ?"
+        params.append(unquote(request.query.cookie))
+    if request.query.after:
+        query += " AND productionDate > ?"
+        params.append(unquote(request.query.after))
+    if request.query.before:
+        query += " AND productionDate < ?"
+        params.append(unquote(request.query.before))
+    
+    c.execute(query, params)
+    found = [{"id": palletID, "cookie": recipeName, "productionDate": productionDate, "blocked": blocked} 
+                        for palletID, recipeName, productionDate, blocked in c]
+    db.commit()
+    response.status = 200
+    return {"data": found }
+
+
 @post('/pallets')
 def post_pallets():
     cookie = request.json
@@ -294,58 +345,63 @@ def post_pallets():
     # rollback the transaction
     c.execute(
         """
-        BEGIN TRANSACTION
-        UPDATE 
-        ingredients
-        JOIN recipeItems USING (ingredientName)
-        SET ingredient.amount = (ingredient.amount - recipeItems.amount)
-        WHERE recipeName = ?
-        ;
         INSERT
         INTO storage(palletNumber, productionDate, blocked, recipeName)
         VALUES (0, DATE('now'), 0, ?)
-        COMMIT TRANSACTION
+        RETURNING palletNumber
         """,
-        [cookie['cookie'],cookie['cookie']]
+        [cookie['cookie']]
     )
     # TODO: change palletNumber in sql-statement
     found, = c.fetchone()
     db.commit()
+    if not found:
+        response.status = 422
+        return { "location": "" } 
+        
     # TODO: handle fail, see following comments
-    # response.status = 422
-    # return { "location": "" } 
     response.status = 201
     palletURL = url_encode(found)
     return { "location": "/pallets/" + palletURL }
 
 @post('/cookies/<recipeName>/block')
 def post_block_cookie(recipeName):
-    c = db.cursor
+    c = db.cursor()
     query = """
         UPDATE storage
-        SET blocked = 1,
-        WHERE 1 = 1
+        SET blocked = 1
+        WHERE recipeName = ?
         """
-    params = []
-    if request.query.name:
-        query += " AND productionDate > ?"
-        params.append(unquote(request.query.before))
-    if request.query.minGpa:
+    params = [recipeName]
+    if request.query.before:
         query += " AND productionDate < ?"
-        params.append(float(request.query.after))
+        params.append(unquote(request.query.before))
+    if request.query.after:
+        query += " AND productionDate > ?"
+        params.append(unquote(request.query.after))
+    c.execute(query, params)
+    db.commit()
+    response.status = 205
+    return {""}
     
 
 @post('/cookies/<recipeName>/unblock')
 def post_unblock_cookie(recipeName):
-    c = db.cursor
+    c = db.cursor()
     recipeName = url_decode(recipeName)
-    c.execute(
-        """
+    query = """
             UPDATE storage
-            SET blocked = 1
+            SET blocked = 0
             WHERE recipeName = ?
-        """, [recipeName]
-    )
+        """
+    params = [recipeName]
+    if request.query.before:
+        query += " AND productionDate < ?"
+        params.append(unquote(request.query.before))
+    if request.query.after:
+        query += " AND productionDate > ?"
+        params.append(unquote(request.query.after))
+    c.execute(query, params)
     db.commit()
     response.status = 205
     return {""}

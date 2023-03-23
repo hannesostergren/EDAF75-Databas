@@ -9,7 +9,7 @@ DROP TABLE IF EXISTS recipeItems;
 
 CREATE TABLE ingredients(
     ingredientName TEXT,
-    amount INT,
+    amount FLOAT,
     unit TEXT,
     deliveryDate DATE,
     deliveryAmount INT,

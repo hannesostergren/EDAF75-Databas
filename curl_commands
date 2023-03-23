@@ -1,0 +1,19 @@
+curl -X POST http://localhost:8888/customers -d '{"name": "Bullar och bong","address": "Bakgatan 4, Lund"}' -H "Content-Type: application/json"
+curl -X POST http://localhost:8888/reset
+curl -X GET http://localhost:8888/customers
+curl -X POST http://localhost:8888/ingredients -d '{"ingredient": "Bread crumbs","unit": "g"}' -H "Content-Type: application/json"
+curl -X POST http://localhost:8888/ingredients/Bread%20crumbs/deliveries -d '{"deliveryTime": "2022-03-05 10:30:00","quantity" : 20000}'  -H "Content-Type: application/json"
+curl -X POST http://localhost:8888/cookies -d '{"name": "Almond delight","recipe": [{"ingredient": "Butter","amount": 400},{"ingredient": "Sugar","amount": 270},{"ingredient": "Chopped almonds","amount": 279},{"ingredient": "Flour","amount": 400},{"ingredient": "Cinnamon","amount": 10}]}' -H "Content-Type: application/json"
+curl -X GET http://localhost:8888/cookies
+curl -X GET http://localhost:8888/cookies/breaddy%20delight/recipe
+
+
+curl -X POST http://localhost:8888/cookies -d '{"name": "Almond delight","recipe": [{"ingredient": "Butter"}]}' -H "Content-Type: application/json"
+
+curl -X POST http://localhost:8888/cookies -d '{"name": "breaddy delight","recipe": [{"ingredient": "Bread crumbs","amount": 400}]}' -H "Content-Type: application/json"
+
+curl -X POST http://localhost:8888/cookies -d '{"name": "Tango","recipe": [{"ingredient": "Bread crumbs","amount": 400}]}' -H "Content-Type: application/json"
+
+curl -X POST http://localhost:8888/cookies/Tango/block\?after=2022-02-21\&before=2022-03-01
+
+curl -X GET /pallets\?cookie=Almond%20delight\&before=2022-03-02
