@@ -8,7 +8,7 @@ curl -X GET http://localhost:8888/cookies
 curl -X GET http://localhost:8888/cookies/breaddy%20delight/recipe
 
 
-curl -X POST http://localhost:8888/cookies -d '{"name": "Almond delight","recipe": [{"ingredient": "Butter"}]}' -H "Content-Type: application/json"
+curl -X POST http://localhost:8888/cookies -d '{"name": "Almond delight","recipe": [{"ingredient": "Butter", "amount" : 200}]}' -H "Content-Type: application/json"
 
 curl -X POST http://localhost:8888/cookies -d '{"name": "breaddy delight","recipe": [{"ingredient": "Bread crumbs","amount": 400}]}' -H "Content-Type: application/json"
 
@@ -17,3 +17,5 @@ curl -X POST http://localhost:8888/cookies -d '{"name": "Tango","recipe": [{"ing
 curl -X POST http://localhost:8888/cookies/Tango/block\?after=2022-02-21\&before=2022-03-01
 
 curl -X GET /pallets\?cookie=Almond%20delight\&before=2022-03-02
+
+curl -X POST http://localhost:8888/pallets -d '{"cookie": "Tango"}' -H "Content-Type: application/json"

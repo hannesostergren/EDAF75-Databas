@@ -17,7 +17,7 @@ CREATE TABLE ingredients(
 );
 
 CREATE TABLE storage(
-    palletNumber INT,
+    palletNumber TEXT DEFAULT (lower(hex(randomblob(16)))) ,
     productionDate DATETIME,
     blocked BIT,
     recipeName TEXT,
@@ -48,7 +48,7 @@ CREATE TABLE recipes(
 );
 
 CREATE TABLE loadedPallets(
-    palletNumber INT,
+    palletNumber TEXT,
     billID INT,
     orderID INT,
     PRIMARY KEY (palletNumber),

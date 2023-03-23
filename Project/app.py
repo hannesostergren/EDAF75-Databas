@@ -88,7 +88,7 @@ def post_reset():
         )""",  
 
         """CREATE TABLE storage(
-            palletNumber INT,
+            palletNumber TEXT DEFAULT (lower(hex(randomblob(16)))),
             productionDate DATETIME,
             blocked BIT,
             recipeName TEXT,
@@ -119,7 +119,7 @@ def post_reset():
         )""",
 
         """CREATE TABLE loadedPallets(
-            palletNumber INT,
+            palletNumber TEXT,
             billID INT,
             orderID INT,
             PRIMARY KEY (palletNumber),
@@ -142,7 +142,7 @@ def post_reset():
             PRIMARY KEY (recipeName, ingredientName)
         )"""
        ]
-    for op in create_operations :
+    for op in create_operations:
         c.execute(op)
         
     # ingredient_trigger()
@@ -344,8 +344,8 @@ def post_pallets():
     c.execute(
         """
         INSERT
-        INTO storage(palletNumber, productionDate, blocked, recipeName)
-        VALUES (0, DATE('now'), 0, ?)
+        INTO storage(productionDate, blocked, recipeName)
+        VALUES (DATE('now'), 0, ?)
         RETURNING palletNumber
         """,
         [cookie['cookie']]
