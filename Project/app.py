@@ -18,47 +18,6 @@ def url_encode(text):
 def ret_pong():
     return "pong\n"
 
-@post('/trigger')
-def ingredient_trigger():
-    c = db.cursor()
-    c.executescript(
-        """
-        DROP TRIGGER IF EXISTS ingredient_amount_not_negative
-        ;
-        CREATE TRIGGER ingredient_amount_not_negative
-        AFTER UPDATE ON ingredients
-        BEGIN
-
-        SELECT IIF(
-            NEW.amount < 0, 
-            RAISE (ROLLBACK, "negative ingredient amount"),
-            ':)'
-        );
-        
-        END
-        ;
-        """
-    )
-    c.executescript(
-        """
-        DROP TRIGGER IF EXISTS remove_ingredients_for_baking
-        ;
-        CREATE TRIGGER remove_ingredients_for_baking
-        BEFORE INSERT ON storage
-        BEGIN
-            UPDATE ingredients
-            SET amount = amount - (
-                SELECT amount
-                FROM recipeItems
-                WHERE ingredients.ingredientName = recipeItems.ingredientName
-            )            
-            ;
-        END
-        ;
-        """
-    )
-    db.commit()
-
 
 @post('/reset')
 def post_reset():
@@ -146,6 +105,42 @@ def post_reset():
         c.execute(op)
         
     # ingredient_trigger()
+    c.executescript(
+        """
+        DROP TRIGGER IF EXISTS ingredient_amount_not_negative
+        ;
+        CREATE TRIGGER ingredient_amount_not_negative
+        AFTER UPDATE ON ingredients
+        BEGIN
+
+        SELECT IIF(
+            NEW.amount < 0, 
+            RAISE (ROLLBACK, "negative ingredient amount"),
+            ':)'
+        );
+        
+        END
+        ;
+        """
+    )
+    c.executescript(
+        """
+        DROP TRIGGER IF EXISTS remove_ingredients_for_baking
+        ;
+        CREATE TRIGGER remove_ingredients_for_baking
+        BEFORE INSERT ON storage
+        BEGIN
+            UPDATE ingredients
+            SET amount = amount - (
+                SELECT 54 * amount
+                FROM recipeItems
+                WHERE ingredients.ingredientName = recipeItems.ingredientName
+            )            
+            ;
+        END
+        ;
+        """
+    )
     db.commit()
     response.status = 205
     return { "location": "/" }
@@ -341,23 +336,23 @@ def post_pallets():
     c = db.cursor()
     # running out of ingredients is handled by a trigger that will 
     # rollback the transaction
-    c.execute(
-        """
-        INSERT
-        INTO storage(productionDate, blocked, recipeName)
-        VALUES (DATE('now'), 0, ?)
-        RETURNING palletNumber
-        """,
-        [cookie['cookie']]
-    )
-    # TODO: change palletNumber in sql-statement
-    found, = c.fetchone()
-    db.commit()
-    if not found:
+
+    try:
+        c.execute(
+            """
+            INSERT
+            INTO storage(productionDate, blocked, recipeName)
+            VALUES (DATE('now'), 0, ?)
+            RETURNING palletNumber
+            """,
+            [cookie['cookie']]
+        )
+        found, = c.fetchone()
+        db.commit()
+    except sqlite3.IntegrityError:
         response.status = 422
         return { "location": "" } 
         
-    # TODO: handle fail, see following comments
     response.status = 201
     palletURL = url_encode(found)
     return { "location": "/pallets/" + palletURL }
