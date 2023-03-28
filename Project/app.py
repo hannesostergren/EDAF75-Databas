@@ -103,6 +103,42 @@ def post_reset():
        ]
     for op in create_operations:
         c.execute(op)
+    c.executescript(
+        """
+        DROP TRIGGER IF EXISTS ingredient_amount_not_negative
+        ;
+        CREATE TRIGGER ingredient_amount_not_negative
+        AFTER UPDATE ON ingredients
+        BEGIN
+
+        SELECT IIF(
+            NEW.amount < 0, 
+            RAISE (ROLLBACK, "negative ingredient amount"),
+            ':)'
+        );
+        
+        END
+        ;
+        """
+    )
+    c.executescript(
+        """
+        DROP TRIGGER IF EXISTS remove_ingredients_for_baking
+        ;
+        CREATE TRIGGER remove_ingredients_for_baking
+        BEFORE INSERT ON storage
+        BEGIN
+            UPDATE ingredients
+            SET amount = amount - (
+                SELECT amount
+                FROM recipeItems
+                WHERE ingredients.ingredientName = recipeItems.ingredientName
+            )            
+            ;
+        END
+        ;
+        """
+    )
         
     # ingredient_trigger()
     c.executescript(
