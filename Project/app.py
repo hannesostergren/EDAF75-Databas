@@ -134,8 +134,14 @@ def post_reset():
             SET amount = amount - (
                 SELECT 54 * amount
                 FROM recipeItems
-                WHERE ingredients.ingredientName = recipeItems.ingredientName
-            )            
+                WHERE ingredients.ingredientName = recipeItems.ingredientName AND
+                    recipeItems.recipeName = NEW.recipeName
+            )
+            WHERE ingredientName in (
+                SELECT ingredientName
+                FROM recipeItems
+                WHERE recipeName = NEW.recipeName
+            )
             ;
         END
         ;
@@ -307,7 +313,7 @@ def get_cookie_recipe(recipeName):
 def get_pallets():
     c = db.cursor()
     query = """
-        SELECT *
+        SELECT palletNumber, recipeName, productionDate, blocked
         FROM storage
         WHERE 1 = 1
         """
